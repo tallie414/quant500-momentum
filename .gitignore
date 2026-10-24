@@ -1,0 +1,21 @@
+# 数据缓存（235MB，运行 download_data.py 自动生成）
+data/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Streamlit / IDE / 系统
+.streamlit/secrets.toml
+.idea/
+.vscode/
+Thumbs.db
+.DS_Store
+
+# 临时产物
+output_sensitivity_log.txt
+streamlit_*.log
