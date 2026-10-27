@@ -18,4 +18,5 @@ Thumbs.db
 
 # 临时产物
 output_sensitivity_log.txt
+output/precompute_log.txt
 streamlit_*.log
