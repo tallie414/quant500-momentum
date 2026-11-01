@@ -375,6 +375,42 @@ def render_bt_result(res: dict, title: str, version: str, note: str = ""):
                 st.code(res["log_tail"], language=None)
 
 
+def add_trade_markers(fig: go.Figure, nav: pd.DataFrame, tl: pd.DataFrame) -> go.Figure:
+    """在净值图上标注关键买卖点（课程要求）：调仓买入▲ / 排名退出◆ / 止损最集中日▼。"""
+    s = nav["strategy"]
+
+    def _y(days):
+        days = pd.DatetimeIndex(days)
+        return s.reindex(days)
+
+    if "type" in tl.columns:
+        buys = pd.to_datetime(tl.loc[tl["type"] == "调仓买入", "exec_date"].unique())
+        fig.add_trace(go.Scatter(x=buys, y=_y(buys), mode="markers",
+                                 marker=dict(symbol="triangle-up", size=7, color="#16803c"),
+                                 name=f"调仓买入（{len(buys)} 次，全标）"))
+        ranks = pd.to_datetime(tl.loc[tl["type"] == "排名退出", "exec_date"].unique())
+        if len(ranks):
+            fig.add_trace(go.Scatter(x=ranks, y=_y(ranks), mode="markers",
+                                     marker=dict(symbol="diamond", size=7, color="#e67e22"),
+                                     name=f"排名退出（{len(ranks)} 天，全标）"))
+        stop_cnt = tl.loc[tl["type"] == "止损"].groupby("exec_date").size()
+        if len(stop_cnt):
+            top = stop_cnt.sort_values(ascending=False).head(10)
+            days = pd.to_datetime(top.index)
+            fig.add_trace(go.Scatter(x=days, y=_y(days), mode="markers",
+                                     marker=dict(symbol="triangle-down", size=11, color="#1a1a8c"),
+                                     name=f"止损最集中10日（全期 {int(stop_cnt.sum())} 笔 / {len(stop_cnt)} 天）",
+                                     text=[f"{v}笔止损" for v in top.values],
+                                     hovertemplate="%{x}<br>%{text}<extra></extra>"))
+    else:  # V1/V2 系：每期调仓一行
+        dcol = "exec_date" if "exec_date" in tl.columns else "date"
+        reb = pd.to_datetime(tl[dcol].unique())
+        fig.add_trace(go.Scatter(x=reb, y=_y(reb), mode="markers",
+                                 marker=dict(symbol="triangle-up", size=7, color="#16803c"),
+                                 name=f"调仓执行日（{len(reb)} 次，全标）"))
+    return fig
+
+
 # ==================== 侧边栏 ====================
 st.sidebar.title("中证500动量选股策略")
 st.sidebar.caption("大学量化投资课程作业 · baostock 数据 · 2019-01 ~ 2026-10")
@@ -483,7 +519,15 @@ elif page == "单版本详情":
         dl_df("⬇ 下载该版本绩效（CSV）", load_metrics(key), f"metrics_{key}.csv", key="dl_m")
 
     with tab2:
-        st.plotly_chart(nav_figure(nav, choice), width='stretch')
+        show_marks = st.toggle("标注关键买卖点（课程要求）", value=True)
+        fig_nav = nav_figure(nav, choice)
+        if show_marks:
+            fig_nav = add_trade_markers(fig_nav, nav, load_trades(key))
+        st.plotly_chart(fig_nav, width='stretch')
+        if show_marks:
+            st.caption("买卖点口径：调仓买入=月末信号次日开盘的每次调仓；V3 系另标注风控卖出"
+                       "（止损笔数多且分散，仅标当日止损最集中的 10 天；排名退出全部标注）。"
+                       "完整逐笔记录见「交易记录」标签与 output/trade_log_*.csv。")
         st.plotly_chart(drawdown_figure(nav, choice), width='stretch')
         st.caption("水下曲线：策略与基准的逐日回撤深度，用于判断「赚的钱是否用不可承受的回撤换来」。")
         st.subheader("年度收益对比")
